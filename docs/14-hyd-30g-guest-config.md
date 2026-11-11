@@ -3,7 +3,7 @@
 Built from the verified 30G and 60F backups (FortiOS 7.4.12). **Design (agreed 2026-11-11): the same as Bangalore, with no new switch.**
 
 - The **guest VLAN 50** is tagged by the HYD APs and passes through the existing unmanaged PoE switches into the 30G `lan` port. This is the same as BLR, where tags pass the unmanaged switch.
-- On the 30G, `virtual-switch-vlan` is enabled. A new VLAN interface **`BGW-GUEST` (VLAN 50 on `lan`)** carries guest network **10.50.20.0/24**, gateway 10.50.20.1.
+- A new VLAN interface **`BGW-GUEST` (VLAN 50 on `lan`)** carries guest network **10.50.20.0/24**, gateway 10.50.20.1.
 - Staff Wi-Fi and LAN are unchanged (untagged, 192.168.2.x). `dmz`/lan2 is not touched.
 - Portal and RADIUS stay on Docker-vm **192.168.0.10** in Bangalore and are reached over the existing `Hyd-to-Blr` VPN:
   - the new phase-2 pair `10.50.20.0/24 ↔ 192.168.0.10/32` carries guest traffic to the portal;
@@ -13,8 +13,7 @@ Built from the verified 30G and 60F backups (FortiOS 7.4.12). **Design (agreed 2
 
 **What can change behaviour:**
 
-- **Step H1** (`virtual-switch-vlan enable`) is a global setting. Do it at a quiet time and have the 30G GUI open. If the 30G refuses the command, stop. In that case we fall back to the managed-switch design, with guests on lan2.
-- **Everything else is additive.** New objects are prefixed `BGW-`. Until the SSID exists in Omada, no traffic uses VLAN 50.
+- **Everything is additive.** New objects are prefixed `BGW-`. Until the SSID exists in Omada, no traffic uses VLAN 50.
 
 Paste **one line at a time**. Watch that the prompt changes after each `config` / `edit`.
 
@@ -85,15 +84,9 @@ RADIUS (from 192.168.2.1) and CoA (to 192.168.2.1) already pass through the exis
 
 ## Part C – FortiGate 30G (Hyderabad)
 
-### H1. Allow VLANs on the switch ports (global – quiet time)
+### H1. (Not needed on the 30G)
 
-```
-config system global
-set virtual-switch-vlan enable
-end
-```
-
-Afterwards, check that the staff LAN still works: you can still ping 192.168.2.83 and a PC still has internet. If the command is rejected, stop and send me the message.
+`set virtual-switch-vlan enable` does **not exist** on the 30G (7.4.12: `command parse error`, tried 2026-11-11). It isn't needed: the VLAN interface on `lan` is accepted directly (H2).
 
 ### H2. Guest VLAN interface (no captive portal yet)
 
@@ -341,7 +334,6 @@ If the phone gets **no IP**, the HYD unmanaged switches are dropping tagged fram
 ## Verify
 
 ```
-get system global | grep virtual-switch-vlan
 show system interface BGW-GUEST
 show firewall policy | grep -f BGW
 diagnose test authserver radius BGW-RADIUS pap testuser testpass
@@ -355,6 +347,5 @@ diagnose vpn tunnel list name Hyd-to-Blr
 3. Delete the exempt list, the group and `BGW-RADIUS`.
 4. Delete phase-2 `Hyd-to-Blr-Guest`, the dns-database and dns-server entries, the DHCP server on BGW-GUEST, and the addresses and service.
 5. Delete interface `BGW-GUEST`.
-6. Optionally, `set virtual-switch-vlan disable`.
 
 On the 60F: delete policy `BGW-hyd-guest-to-portal`, the 10.50.20.0/24 static route, phase-2 `Blr-to-Hyd-Guest`, and address `BGW-GUEST-NET-HYD`.
