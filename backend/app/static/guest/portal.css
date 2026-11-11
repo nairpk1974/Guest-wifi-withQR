@@ -1,0 +1,30 @@
+:root{--navy:#0b3d5c;--teal:#1a9e99;--bg:#f2f5f8;--ink:#1b2733;--muted:#5d6b78;--line:#dde3ea;--bad:#b42318;--ok:#067647;--warn:#b54708}
+*{box-sizing:border-box}
+html,body{margin:0;padding:0}
+body{font:16px/1.5 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Arial,sans-serif;background:var(--bg);color:var(--ink);min-height:100vh;display:flex;flex-direction:column;align-items:center;padding:16px}
+.brand{display:flex;align-items:center;gap:10px;margin:8px 0 16px;width:100%;max-width:460px}
+.brand .logo{width:40px;height:40px}
+.brand strong{display:block;font-size:18px;color:var(--navy)}
+.brand span{display:block;font-size:13px;color:var(--muted)}
+.card{background:#fff;border:1px solid var(--line);border-radius:14px;padding:22px 20px;width:100%;max-width:460px;box-shadow:0 1px 3px rgba(16,24,40,.06)}
+h1{font-size:22px;margin:4px 0 8px;color:var(--navy)}
+.lead{font-size:16px;margin:0 0 14px}
+.small{font-size:13px;color:var(--muted)}
+.note{background:#fffaeb;border:1px solid #fedf89;padding:10px 12px;border-radius:8px;font-size:14px}
+.err{background:#fef3f2;border:1px solid #fecdca;color:var(--bad);padding:10px 12px;border-radius:8px;font-size:14px}
+.steps{padding-left:20px;margin:0 0 16px}.steps li{margin-bottom:6px}
+label{display:block;font-weight:600;margin:12px 0 6px}
+.check{display:flex;gap:10px;align-items:flex-start;font-weight:400;font-size:14px;margin:16px 0}
+.check input{width:20px;height:20px;margin-top:2px;flex:none}
+input.code{width:100%;font-size:24px;letter-spacing:.18em;text-align:center;padding:12px;border:1px solid var(--line);border-radius:10px;text-transform:uppercase;font-family:ui-monospace,Menlo,Consolas,monospace}
+.btn{display:block;width:100%;text-align:center;background:var(--navy);color:#fff;border:0;border-radius:10px;padding:14px;font-size:17px;font-weight:600;text-decoration:none;cursor:pointer;margin-top:8px}
+.btn:active{background:#082d44}
+a{color:var(--teal)}
+.badge{display:inline-block;font-size:12px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;padding:4px 10px;border-radius:99px;margin-bottom:6px}
+.badge.ok{background:#ecfdf3;color:var(--ok)}.badge.bad{background:#fef3f2;color:var(--bad)}.badge.warn{background:#fffaeb;color:var(--warn)}
+.kv{display:grid;grid-template-columns:auto 1fr;gap:6px 14px;margin:14px 0}
+.kv dt{color:var(--muted)}.kv dd{margin:0;font-weight:600}
+.prose{white-space:pre-line;font-size:15px}
+.spinner{width:36px;height:36px;border:4px solid var(--line);border-top-color:var(--teal);border-radius:50%;margin:18px auto;animation:spin 1s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+.foot{margin-top:18px;font-size:13px;color:var(--muted);text-align:center}

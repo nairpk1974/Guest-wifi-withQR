@@ -1,0 +1,17 @@
+{% extends "base.html" %}
+{% block content %}
+<h1>Welcome, {{ first_name }}</h1>
+<p class="lead">Your internet access at <b>{{ location }}</b> is ready. It lasts <b>{{ hours }} hour{{ "s" if hours != 1 }}</b> from when you connect.</p>
+<ol class="steps">
+  <li>Make sure this phone or laptop is connected to the Wi-Fi network <b>{{ ssid }}</b>.</li>
+  <li>Accept the terms below and tap <b>Connect</b>.</li>
+</ol>
+{% if already %}<p class="note">This pass has already been used. It only works again on the same device it was first used on.</p>{% endif %}
+<form method="post" action="/q/{{ token }}">
+  <input type="hidden" name="csrf" value="{{ csrf }}">
+  <label class="check"><input type="checkbox" name="accept" value="yes" required>
+    <span>I accept the <a href="/portal/terms" target="_blank">terms of use</a> and have read the <a href="/portal/privacy" target="_blank">privacy notice</a>.</span></label>
+  <button type="submit" class="btn">Connect</button>
+</form>
+<p class="small">This pass works on one device only. Please don't share it.</p>
+{% endblock %}

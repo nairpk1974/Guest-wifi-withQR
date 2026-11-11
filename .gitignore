@@ -1,0 +1,11 @@
+.env
+deploy/certs/*.pem
+deploy/nginx/admin-allow.conf
+node_modules/
+dist/
+__pycache__/
+*.pyc
+backups/
+*.conf.bak
+*.tar.gz
+.DS_Store

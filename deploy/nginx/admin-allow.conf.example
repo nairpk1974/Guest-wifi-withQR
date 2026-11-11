@@ -1,0 +1,5 @@
+# Copy to admin-allow.conf and list the CORPORATE subnets allowed to open the admin console.
+# Guest VLAN subnets must NOT appear here. Verify subnets during discovery.
+# allow 10.10.0.0/16;      # example only - Bangalore corporate LAN
+# allow 10.20.0.0/16;      # example only - Hyderabad corporate LAN (via site-to-site VPN)
+deny all;

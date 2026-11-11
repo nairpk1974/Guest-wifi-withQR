@@ -1,0 +1,18 @@
+{% extends "base.html" %}
+{% block content %}
+<h1>Sign in to Guest Wi-Fi</h1>
+<p class="lead">Scan the QR code on your visitor pass with this device's camera, <b>or</b> enter the 8-character access code printed below it.</p>
+{% if error %}<p class="err" role="alert">{{ error }}</p>{% endif %}
+<form method="post" action="/portal/code" autocomplete="off">
+  <input type="hidden" name="csrf" value="{{ csrf }}">
+  <input type="hidden" name="post" value="{{ post }}">
+  <input type="hidden" name="magic" value="{{ magic }}">
+  <label for="code">Access code</label>
+  <input id="code" name="code" class="code" inputmode="text" autocapitalize="characters" spellcheck="false"
+         maxlength="9" placeholder="XXXX-XXXX" required>
+  <label class="check"><input type="checkbox" name="accept" value="yes" required>
+    <span>I accept the <a href="/portal/terms" target="_blank">terms of use</a> and have read the <a href="/portal/privacy" target="_blank">privacy notice</a>.</span></label>
+  <button type="submit" class="btn">Connect</button>
+</form>
+<p class="small">No pass? Please ask reception. Guest access is for registered visitors only.</p>
+{% endblock %}

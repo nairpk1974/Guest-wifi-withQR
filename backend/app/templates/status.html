@@ -1,0 +1,25 @@
+{% extends "base.html" %}
+{% block content %}
+{% if not ap %}
+<h1>Connection status</h1>
+<p class="lead">No guest pass is linked to this browser.</p>
+<p>Connect to the guest Wi-Fi and scan the QR code on your visitor pass, or enter your access code on the sign-in page.</p>
+{% elif state == "connected" %}
+<div class="badge ok">Connected</div>
+<h1>You're online, {{ first_name }}</h1>
+<dl class="kv">
+  <dt>Network</dt><dd>{{ ssid }} ({{ location }})</dd>
+  <dt>Access ends</dt><dd>{{ expires }}</dd>
+  <dt>Time left</dt><dd>{% if remaining >= 60 %}{{ remaining // 60 }} h {{ remaining % 60 }} min{% else %}{{ remaining }} min{% endif %}</dd>
+</dl>
+<p class="small">Your access ends automatically. Internal Bessel Systems systems are not reachable from this network.</p>
+{% elif state == "pending" %}
+<div class="badge warn">Not signed in yet</div>
+<h1>Hi {{ first_name }}</h1>
+<p>Your pass is ready ({{ hours }} h). Open any website on <b>{{ ssid }}</b> to finish signing in.</p>
+{% else %}
+<div class="badge bad">Access ended</div>
+<h1>Hi {{ first_name }}</h1>
+<p>{{ message }}</p>
+{% endif %}
+{% endblock %}

@@ -1,0 +1,9 @@
+{% extends "base.html" %}
+{% block content %}
+<h1>Connecting…</h1>
+<p class="lead">Signing you in to <b>{{ ssid }}</b>. This takes a few seconds.</p>
+<div class="spinner" aria-hidden="true"></div>
+<p class="small">If nothing happens, check you are on <b>{{ ssid }}</b> and tap the button.</p>
+<a id="trigger" class="btn" href="{{ trigger }}" data-auto="1">Continue</a>
+{% endblock %}
+{% block scripts %}<script src="/static/guest/portal.js"></script>{% endblock %}

@@ -1,0 +1,44 @@
+# rlm_rest -> Bessel Guest Wi-Fi backend (internal docker network only)
+rest {
+	tls {
+		check_cert = no
+		check_cert_cn = no
+	}
+	connect_uri = "$ENV{BACKEND_INTERNAL_URL}"
+	connect_timeout = 3.0
+
+	authenticate {
+		uri = "${..connect_uri}/internal/radius/authenticate"
+		method = 'post'
+		body = 'json'
+		auth = 'basic'
+		username = "radius"
+		password = "$ENV{RADIUS_API_KEY}"
+		require_auth = yes
+		timeout = 4
+		tls = ${..tls}
+	}
+
+	accounting {
+		uri = "${..connect_uri}/internal/radius/accounting"
+		method = 'post'
+		body = 'json'
+		auth = 'basic'
+		username = "radius"
+		password = "$ENV{RADIUS_API_KEY}"
+		require_auth = yes
+		timeout = 4
+		tls = ${..tls}
+	}
+
+	pool {
+		start = 0
+		min = 0
+		max = 32
+		spare = 4
+		uses = 0
+		retry_delay = 5
+		lifetime = 0
+		idle_timeout = 60
+	}
+}

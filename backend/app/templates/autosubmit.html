@@ -1,0 +1,14 @@
+{% extends "base.html" %}
+{% block content %}
+<h1>Almost there…</h1>
+<p class="lead">Activating your internet access.</p>
+<div class="spinner" aria-hidden="true"></div>
+<form id="fgt" method="post" action="{{ post }}" data-auto="1">
+  <input type="hidden" name="magic" value="{{ magic }}">
+  <input type="hidden" name="username" value="{{ username }}">
+  <input type="hidden" name="password" value="{{ password }}">
+  <input type="hidden" name="4Tredir" value="{{ redir }}">
+  <button type="submit" class="btn">Continue</button>
+</form>
+{% endblock %}
+{% block scripts %}<script src="/static/guest/portal.js"></script>{% endblock %}

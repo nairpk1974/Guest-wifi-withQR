@@ -1,0 +1,64 @@
+# Bessel Guest Wi-Fi virtual server. Authentication decisions are made by the backend API.
+server guestwifi {
+	listen {
+		type = auth
+		ipaddr = *
+		port = 1812
+	}
+	listen {
+		type = acct
+		ipaddr = *
+		port = 1813
+	}
+
+	authorize {
+		Autz-Type Status-Server {
+			ok
+		}
+		filter_username
+		preprocess
+		if (!&User-Password) {
+			reject
+		}
+		# Pass the client shortname (fgt-blr / fgt-hyd) to the backend for location checks
+		update request {
+			&Tmp-String-0 := "%{client:shortname}"
+		}
+		update control {
+			&Auth-Type := rest
+			# rlm_rest uses the guest's User-Name/User-Password as HTTP Basic credentials in the
+			# authenticate call, so the API key travels in its own header.
+			&REST-HTTP-Header += "X-Radius-Key: $ENV{RADIUS_API_KEY}"
+		}
+	}
+
+	authenticate {
+		Auth-Type rest {
+			# backend answers 200 + reply attributes (= "updated") to accept, 401 to reject
+			rest {
+				updated = 1
+			}
+			if (updated) {
+				ok
+			}
+		}
+	}
+
+	preacct {
+		preprocess
+		acct_unique
+		update request {
+			&Tmp-String-0 := "%{client:shortname}"
+		}
+	}
+
+	accounting {
+		rest
+	}
+
+	post-auth {
+		Post-Auth-Type REJECT {
+			attr_filter.access_reject
+		}
+	}
+}
