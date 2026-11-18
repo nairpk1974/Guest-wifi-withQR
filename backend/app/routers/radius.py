@@ -96,26 +96,37 @@ async def authenticate(request: Request, db: Session = Depends(get_db)):
     except PassError as e:
         return _reject(db, e.code, a, loc, ap, e.message)
 
-    device = _mac(a.get("Calling-Station-Id")) or a.get("Framed-IP-Address")
-    if ap.bound_device and device and device != ap.bound_device:
-        return _reject(db, "device_mismatch", a, loc, ap, "Pass already in use on another device")
-
     now = utcnow()
-    if ap.access_started_at is None:
-        ap.access_started_at = now
-        ap.access_expires_at = now + timedelta(hours=g.duration_hours)
-        g.status = GuestStatus.active
-    if device and not ap.bound_device:
-        ap.bound_device = device
-    remaining = int((ap.access_expires_at - now).total_seconds())
-    if remaining <= 0:
+    permanent = g.pass_kind == "permanent"
+    if permanent:
+        # Any number of devices; valid until revoked or until the optional end date.
+        if ap.access_started_at is None:
+            ap.access_started_at = now
+            g.status = GuestStatus.active
+        remaining = int((ap.access_expires_at - now).total_seconds()) if ap.access_expires_at else None
+    else:
+        device = _mac(a.get("Calling-Station-Id")) or a.get("Framed-IP-Address")
+        if ap.bound_device and device and device != ap.bound_device:
+            return _reject(db, "device_mismatch", a, loc, ap, "Pass already in use on another device")
+        if ap.access_started_at is None:
+            ap.access_started_at = now
+            ap.access_expires_at = now + timedelta(hours=g.duration_hours)
+            g.status = GuestStatus.active
+        if device and not ap.bound_device:
+            ap.bound_device = device
+        remaining = int((ap.access_expires_at - now).total_seconds())
+    if remaining is not None and remaining <= 0:
         return _reject(db, "expired", a, loc, ap, "Access expired")
     db.add(AuthEvent(source="radius", result="accept", reason="ok", username=username, guest_id=g.id,
                      location_id=loc.id, client_ip=a.get("Framed-IP-Address"),
                      client_mac=_mac(a.get("Calling-Station-Id")), nas_shortname=loc.nas_shortname))
     db.commit()
-    return {"reply:Session-Timeout": remaining, "reply:Fortinet-Group-Name": get_settings().radius_group_name,
-            "reply:Acct-Interim-Interval": 300}
+    reply = {"reply:Fortinet-Group-Name": get_settings().radius_group_name, "reply:Acct-Interim-Interval": 300}
+    if remaining is not None:
+        # Permanent codes without an end date get no Session-Timeout: the firewall then keeps the device
+        # signed in until it is idle for the user group's authtimeout, or until the code is revoked (CoA).
+        reply["reply:Session-Timeout"] = remaining
+    return reply
 
 
 def _octets(a: dict, prefix: str) -> int:

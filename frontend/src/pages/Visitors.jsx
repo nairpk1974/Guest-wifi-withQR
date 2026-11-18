@@ -6,7 +6,7 @@ import { Alert, Field, Modal, Pager, PassCard, StatusBadge, useMeta } from '../u
 
 const EMPTY = { location_id: '', q: '', mobile: '', date_from: '', date_to: '', status: '', approval: '' }
 
-function GuestDetail({ id, onClose, onChanged }) {
+export function GuestDetail({ id, onClose, onChanged }) {
   const { can } = useAuth()
   const [g, setG] = useState(null)
   const [pass, setPass] = useState(null)
@@ -15,6 +15,7 @@ function GuestDetail({ id, onClose, onChanged }) {
   const [reason, setReason] = useState('')
   const [mode, setMode] = useState(null) // 'reject' | 'revoke'
   const staff = can('super_admin', 'reception')
+  const admin = can('super_admin')
 
   const load = useCallback(() => api.get(`/api/guests/${id}`).then(setG).catch(e => setErr(e.message)), [id])
   useEffect(() => { load() }, [load])
@@ -25,6 +26,10 @@ function GuestDetail({ id, onClose, onChanged }) {
   }
   const approve = () => act(async () => setPass(await api.post(`/api/guests/${id}/approve`)))
   const reissue = () => act(async () => setPass(await api.post(`/api/guests/${id}/reissue`)))
+  const changeCode = () => {
+    if (!window.confirm('Create a new code? The current code stops working immediately and every device using it is disconnected.')) return
+    reissue()
+  }
   const showPass = () => act(async () => setPass(await api.get(`/api/guests/${id}/pass`)))
   const email = () => act(async () => { await api.post(`/api/guests/${id}/pass/email`); setMsg('Pass e-mailed to visitor.') })
   const withReason = (e) => {
@@ -40,7 +45,7 @@ function GuestDetail({ id, onClose, onChanged }) {
   }
 
   return (
-    <Modal title="Visitor details" onClose={onClose} wide>
+    <Modal title={g?.pass_kind === 'permanent' ? 'Permanent Wi-Fi code' : 'Visitor details'} onClose={onClose} wide>
       <Alert>{err}</Alert>
       <Alert kind="info">{msg}</Alert>
       {!g ? <p className="muted">Loading…</p> : pass ? (
@@ -48,7 +53,7 @@ function GuestDetail({ id, onClose, onChanged }) {
           <PassCard pass={pass} />
           <div className="row no-print">
             <button className="btn primary" onClick={() => window.print()}>Print pass</button>
-            {g.email && !pass.redeemed && <button className="btn ghost" onClick={email}>E-mail pass</button>}
+            {g.email && (!pass.redeemed || g.pass_kind === 'permanent') && <button className="btn ghost" onClick={email}>E-mail {g.pass_kind === 'permanent' ? 'code' : 'pass'}</button>}
             <button className="btn ghost" onClick={() => setPass(null)}>Back to details</button>
           </div>
         </div>
@@ -58,6 +63,18 @@ function GuestDetail({ id, onClose, onChanged }) {
             <div><h2>{g.full_name}</h2><div className="muted">{g.company} · {g.mobile}{g.email ? ` · ${g.email}` : ''}</div></div>
             <StatusBadge status={g.status} />
           </div>
+          {g.pass_kind === 'permanent' ? (
+            <dl className="kv">
+              <dt>Type</dt><dd>Permanent code · any number of devices</dd>
+              <dt>Location</dt><dd>{g.location_code}</dd>
+              <dt>Department</dt><dd>{g.department}</dd>
+              <dt>Note</dt><dd>{g.purpose}</dd>
+              <dt>Valid until</dt><dd>{g.valid_until ? fmt.date(g.valid_until) : 'Until revoked'}</dd>
+              <dt>Created</dt><dd>{fmt.dt(g.created_at)} by {g.created_by || '—'}</dd>
+              <dt>First used</dt><dd>{g.access_started_at ? fmt.dt(g.access_started_at) : 'not used yet'}</dd>
+              {g.revoked_at && <><dt>Revoked</dt><dd>{fmt.dt(g.revoked_at)} by {g.revoked_by} · {g.revoke_reason}</dd></>}
+            </dl>
+          ) : (
           <dl className="kv">
             <dt>Location</dt><dd>{g.location_code}</dd>
             <dt>Visiting</dt><dd>{g.host_person} ({g.department})</dd>
@@ -70,7 +87,15 @@ function GuestDetail({ id, onClose, onChanged }) {
             <dt>Access</dt><dd>{g.access_started_at ? `${fmt.dt(g.access_started_at)} → ${fmt.dt(g.access_expires_at)}` : 'not started'}</dd>
             {g.revoked_at && <><dt>Revoked</dt><dd>{fmt.dt(g.revoked_at)} by {g.revoked_by} · {g.revoke_reason}</dd></>}
           </dl>
-          {staff && (
+          )}
+          {staff && g.pass_kind === 'permanent' && (
+            <div className="row">
+              {admin && g.pass_available && <button className="btn" onClick={showPass}>Show / print code</button>}
+              {admin && ['approved', 'active'].includes(g.status) && <button className="btn ghost" onClick={changeCode}>Change code</button>}
+              {['approved', 'active'].includes(g.status) && <button className="btn danger" onClick={() => setMode('revoke')}>Revoke code now</button>}
+            </div>
+          )}
+          {staff && g.pass_kind !== 'permanent' && (
             <div className="row">
               {g.status === 'pending' && <><button className="btn primary" onClick={approve}>Approve & generate QR</button>
                 <button className="btn danger" onClick={() => setMode('reject')}>Reject</button></>}
@@ -88,6 +113,14 @@ function GuestDetail({ id, onClose, onChanged }) {
               <button type="button" className="btn ghost" onClick={() => setMode(null)}>Cancel</button>
             </form>
           )}
+          {g.devices && <>
+            <h3>Devices that entered the code</h3>
+            {g.devices.length === 0 ? <p className="muted small">None yet.</p> : (
+              <div className="table-wrap"><table className="table compact"><thead><tr><th>First used</th><th>Last used</th><th>IP</th></tr></thead>
+                <tbody>{g.devices.map((d, i) => <tr key={i}><td>{fmt.dt(d.first_used)}</td><td>{fmt.dt(d.last_used)}</td><td className="mono small">{d.ip}</td></tr>)}</tbody></table></div>
+            )}
+            <p className="muted small">The device MAC addresses are in the sessions below and in Reports → Guest device log.</p>
+          </>}
           <h3>Sessions</h3>
           {g.sessions.length === 0 ? <p className="muted small">No firewall sessions recorded.</p> : (
             <div className="table-wrap"><table className="table compact"><thead><tr><th>Started</th><th>Ended</th><th>IP / MAC</th><th>Down / Up</th><th>Cause</th></tr></thead>
@@ -118,7 +151,7 @@ export default function Visitors() {
   const [err, setErr] = useState('')
 
   const load = useCallback(() => {
-    api.get('/api/guests' + qs({ ...applied, page, page_size: 25 })).then(setData).catch(e => setErr(e.message))
+    api.get('/api/guests' + qs({ ...applied, kind: 'visitor', page, page_size: 25 })).then(setData).catch(e => setErr(e.message))
   }, [applied, page])
   useEffect(() => { load() }, [load])
 

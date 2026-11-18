@@ -9,14 +9,15 @@
 <h1>You're online, {{ first_name }}</h1>
 <dl class="kv">
   <dt>Network</dt><dd>{{ ssid }} ({{ location }})</dd>
-  <dt>Access ends</dt><dd>{{ expires }}</dd>
-  <dt>Time left</dt><dd>{% if remaining >= 60 %}{{ remaining // 60 }} h {{ remaining % 60 }} min{% else %}{{ remaining }} min{% endif %}</dd>
+  {% if expires %}<dt>Access ends</dt><dd>{{ expires }}</dd>
+  {% if not permanent %}<dt>Time left</dt><dd>{% if remaining >= 60 %}{{ remaining // 60 }} h {{ remaining % 60 }} min{% else %}{{ remaining }} min{% endif %}</dd>{% endif %}
+  {% else %}<dt>Access</dt><dd>Until withdrawn</dd>{% endif %}
 </dl>
-<p class="small">Your access ends automatically. Internal Bessel Systems systems are not reachable from this network.</p>
+<p class="small">{% if permanent %}You are signed in with your personal Wi-Fi code.{% else %}Your access ends automatically.{% endif %} Internal Bessel Systems systems are not reachable from this network.</p>
 {% elif state == "pending" %}
 <div class="badge warn">Not signed in yet</div>
 <h1>Hi {{ first_name }}</h1>
-<p>Your pass is ready ({{ hours }} h). Open any website on <b>{{ ssid }}</b> to finish signing in.</p>
+<p>Your {% if permanent %}code{% else %}pass ({{ hours }} h){% endif %} is ready. Open any website on <b>{{ ssid }}</b> to finish signing in.</p>
 {% else %}
 <div class="badge bad">Access ended</div>
 <h1>Hi {{ first_name }}</h1>

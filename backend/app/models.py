@@ -126,6 +126,10 @@ class Guest(Base):
     visit_date: Mapped[date] = mapped_column(Date, index=True)
     duration_hours: Mapped[int] = mapped_column(Integer)
     status: Mapped[GuestStatus] = mapped_column(Enum(GuestStatus, name="guest_status"), index=True)
+    # "visitor" = normal timed pass; "permanent" = reusable code for any number of devices, valid until
+    # revoked or until valid_until (inclusive, location time zone)
+    pass_kind: Mapped[str] = mapped_column(String(16), default="visitor", server_default="visitor", index=True)
+    valid_until: Mapped[date | None] = mapped_column(Date, nullable=True)
 
     created_by_id: Mapped[int | None] = mapped_column(ForeignKey("users.id"), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), index=True)
@@ -173,6 +177,21 @@ class AccessPass(Base):
     bound_device: Mapped[str | None] = mapped_column(String(64), nullable=True)
 
     guest: Mapped[Guest] = relationship(back_populates="passes")
+
+
+class PassDevice(Base):
+    """Browsers that redeemed a permanent code (one row per device). The claim cookie lets the portal sign
+    the device in again automatically when the firewall asks."""
+
+    __tablename__ = "pass_devices"
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    pass_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("access_passes.id", ondelete="CASCADE"), index=True)
+    claim_hash: Mapped[str] = mapped_column(String(64), unique=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    last_used_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    ip: Mapped[str | None] = mapped_column(String(64), nullable=True)
+
+    access_pass: Mapped["AccessPass"] = relationship()
 
 
 class RadiusSession(Base):

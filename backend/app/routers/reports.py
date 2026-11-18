@@ -117,10 +117,11 @@ def build_report(kind: str, db: Session, user: User, location_id: int | None, da
     if kind in ("visitors", "expired-revoked"):
         st = status if kind == "visitors" else (status or "expired,revoked")
         stmt = guest_query(user, loc, st, q, mobile, start.date(), end.date())
-        cols = ["Visit date", "Name", "Company", "Mobile", "Email", "Host", "Department", "Location", "Purpose",
+        cols = ["Visit date", "Type", "Name", "Company", "Mobile", "Email", "Host", "Department", "Location", "Purpose",
                 "Duration (h)", "Status", "Registered at", "Registered by", "Decided by", "Decided at",
                 "Revoked at", "Revoke reason"]
-        rows = [[g.visit_date, g.full_name, g.company, g.mobile, g.email, g.host_person, g.department,
+        rows = [[g.visit_date, g.pass_kind if g.pass_kind != "permanent" else
+                 f"permanent (until {g.valid_until.isoformat() if g.valid_until else 'revoked'})", g.full_name, g.company, g.mobile, g.email, g.host_person, g.department,
                  g.location.code, g.purpose, g.duration_hours, g.status.value, g.created_at,
                  g.created_by.full_name if g.created_by else "", g.decided_by.full_name if g.decided_by else "",
                  g.decided_at, g.revoked_at, g.revoke_reason]

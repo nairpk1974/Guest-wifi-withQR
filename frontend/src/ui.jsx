@@ -56,7 +56,7 @@ export function useMeta() {
 export function PassCard({ pass }) {
   return (
     <div className="pass printable">
-      <div className="pass-head"><Logo size={30} /><div><b>Bessel Systems</b><span>Guest Wi-Fi pass</span></div></div>
+      <div className="pass-head"><Logo size={30} /><div><b>Bessel Systems</b><span>{pass.pass_kind === 'permanent' ? 'Wi-Fi access code' : 'Guest Wi-Fi pass'}</span></div></div>
       <div className="pass-name">{pass.guest_name}<small>{pass.company}</small></div>
       <div className="pass-grid">
         <div>
@@ -71,12 +71,21 @@ export function PassCard({ pass }) {
           <small>or enter this code on the sign-in page</small>
         </div>
       </div>
-      <ul className="pass-meta">
-        <li>{pass.location} · valid on {pass.visit_date}</li>
-        <li>Access lasts <b>{pass.duration_hours} h</b> from first sign-in</li>
-        <li>Use before {new Date(pass.redeem_before).toLocaleString('en-IN', { dateStyle: 'medium', timeStyle: 'short' })}</li>
-        <li>Works on one device only. Do not share.</li>
-      </ul>
+      {pass.pass_kind === 'permanent' ? (
+        <ul className="pass-meta">
+          <li>{pass.location} · <b>permanent Wi-Fi code</b></li>
+          <li>Valid {pass.valid_until ? <>until <b>{new Date(pass.valid_until).toLocaleDateString('en-IN', { dateStyle: 'medium' })}</b></> : <b>until withdrawn</b>}</li>
+          <li>Works on all your devices. Enter the code once on each device.</li>
+          <li>Issued to you personally. Do not share.</li>
+        </ul>
+      ) : (
+        <ul className="pass-meta">
+          <li>{pass.location} · valid on {pass.visit_date}</li>
+          <li>Access lasts <b>{pass.duration_hours} h</b> from first sign-in</li>
+          <li>Use before {new Date(pass.redeem_before).toLocaleString('en-IN', { dateStyle: 'medium', timeStyle: 'short' })}</li>
+          <li>Works on one device only. Do not share.</li>
+        </ul>
+      )}
     </div>
   )
 }

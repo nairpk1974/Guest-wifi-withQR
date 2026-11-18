@@ -9,12 +9,13 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from sqlalchemy import Select, func, or_, select
 from sqlalchemy.orm import Session
 
-from ..access import issue_pass, mark_disconnected, revoke
+from ..access import issue_pass, mark_disconnected, queue_disconnects, revoke
 from ..coa import send_disconnect
 from ..config import get_settings
 from ..db import get_db
-from ..models import AuthEvent, Guest, GuestStatus, Location, PendingDisconnect, RadiusSession, Role, User
-from ..schemas import GuestIn, ReasonIn
+from ..models import (AuthEvent, Guest, GuestStatus, Location, PassDevice, PendingDisconnect, RadiusSession, Role,
+                      User)
+from ..schemas import GuestIn, PermanentIn, ReasonIn
 from ..security import assert_location, audit, current_user, location_scope, require_roles, utcnow
 from ..serialize import guest_out, iso, location_out, pass_available, pass_payload, session_out
 
@@ -48,8 +49,10 @@ def _get_guest(db: Session, guest_id: str, user: User) -> Guest:
 
 def guest_query(user: User, location_id: int | None = None, status: str | None = None, q: str | None = None,
                 mobile: str | None = None, date_from: date | None = None, date_to: date | None = None,
-                approval: str | None = None) -> Select:
+                approval: str | None = None, kind: str | None = None) -> Select:
     stmt = select(Guest)
+    if kind in ("visitor", "permanent"):
+        stmt = stmt.where(Guest.pass_kind == kind)
     scope = location_scope(user)
     if scope is not None:
         stmt = stmt.where(Guest.location_id == scope)
@@ -79,10 +82,11 @@ def guest_query(user: User, location_id: int | None = None, status: str | None =
 @router.get("/guests")
 def list_guests(location_id: int | None = None, status: str | None = None, q: str | None = None,
                 mobile: str | None = None, date_from: date | None = None, date_to: date | None = None,
-                approval: str | None = None, page: int = Query(1, ge=1), page_size: int = Query(25, ge=1, le=200),
+                approval: str | None = None, kind: str | None = None, page: int = Query(1, ge=1),
+                page_size: int = Query(25, ge=1, le=200),
                 user: User = Depends(require_roles(*ANY)), db: Session = Depends(get_db)):
     try:
-        stmt = guest_query(user, location_id, status, q, mobile, date_from, date_to, approval)
+        stmt = guest_query(user, location_id, status, q, mobile, date_from, date_to, approval, kind)
     except ValueError:
         raise HTTPException(400, "Invalid status filter")
     total = db.scalar(select(func.count()).select_from(stmt.subquery()))
@@ -142,6 +146,33 @@ def create_guest(body: GuestIn, request: Request, approve: bool = False,
     return guest_out(g)
 
 
+@router.post("/permanent-codes", status_code=201)
+def create_permanent(body: PermanentIn, request: Request, user: User = Depends(require_roles(Role.super_admin)),
+                     db: Session = Depends(get_db)):
+    """Super Administrator assigns a permanent Wi-Fi code to a named person. The code works on any number of
+    devices until it is revoked, or until valid_until (inclusive) if set."""
+    loc = db.get(Location, body.location_id)
+    if not loc or not loc.enabled:
+        raise HTTPException(400, "Unknown or disabled location")
+    today = utcnow().astimezone(ZoneInfo(loc.timezone)).date()
+    if body.valid_until and body.valid_until < today:
+        raise HTTPException(400, "End date cannot be in the past")
+    now = utcnow()
+    g = Guest(full_name=body.full_name, mobile=body.mobile, email=body.email, company=body.company or "-",
+              host_person="-", department=body.department or "-", purpose=body.purpose or "Permanent Wi-Fi code",
+              location_id=loc.id, visit_date=today, duration_hours=0, status=GuestStatus.approved,
+              pass_kind="permanent", valid_until=body.valid_until, created_by_id=user.id, decided_by_id=user.id,
+              decided_at=now)
+    db.add(g)
+    db.flush()
+    ap, _, _ = issue_pass(db, g)
+    audit(db, request, user, "permanent.created", "guest", str(g.id), g.location_id, name=g.full_name,
+          valid_until=body.valid_until.isoformat() if body.valid_until else None)
+    db.commit()
+    db.refresh(g)
+    return {**guest_out(g), "pass": pass_payload(g, ap)}
+
+
 @router.get("/guests/{guest_id}")
 def get_guest(guest_id: str, user: User = Depends(require_roles(*ANY)), db: Session = Depends(get_db)):
     g = _get_guest(db, guest_id, user)
@@ -153,6 +184,12 @@ def get_guest(guest_id: str, user: User = Depends(require_roles(*ANY)), db: Sess
     out["auth_events"] = [{"ts": iso(e.ts), "source": e.source, "result": e.result, "reason": e.reason,
                            "client_ip": e.client_ip} for e in events]
     out["pass_available"] = pass_available(g) is not None
+    if g.pass_kind == "permanent":
+        pass_ids = [p.id for p in g.passes]
+        devs = db.scalars(select(PassDevice).where(PassDevice.pass_id.in_(pass_ids))
+                          .order_by(PassDevice.last_used_at.desc())).all() if pass_ids else []
+        out["devices"] = [{"first_used": iso(d.created_at), "last_used": iso(d.last_used_at), "ip": d.ip}
+                          for d in devs]
     return out
 
 
@@ -226,6 +263,20 @@ def revoke_guest(guest_id: str, body: ReasonIn, request: Request, user: User = D
 def reissue(guest_id: str, request: Request, user: User = Depends(require_roles(*STAFF)),
             db: Session = Depends(get_db)):
     g = _get_guest(db, guest_id, user)
+    if g.pass_kind == "permanent":
+        if user.role != Role.super_admin:
+            raise HTTPException(403, "Only a Super Administrator can change permanent codes")
+        if g.status not in (GuestStatus.approved, GuestStatus.active):
+            raise HTTPException(409, f"Code is {g.status.value}; create a new permanent code instead")
+        # New code: the old one stops working and every device signed in with it is disconnected.
+        queued = queue_disconnects(db, g)
+        ap, _, _ = issue_pass(db, g)
+        g.status = GuestStatus.approved
+        db.flush()
+        results = _flush_disconnects(db, g.location) if queued else []
+        audit(db, request, user, "permanent.code_changed", "guest", str(g.id), g.location_id, disconnects=results)
+        db.commit()
+        return pass_payload(g, ap)
     if g.status != GuestStatus.approved:
         raise HTTPException(409, "Only approved passes that have not started can be re-issued. "
                                  "For active guests, revoke and register again.")
@@ -239,6 +290,8 @@ def reissue(guest_id: str, request: Request, user: User = Depends(require_roles(
 def get_pass(guest_id: str, request: Request, user: User = Depends(require_roles(*STAFF)),
              db: Session = Depends(get_db)):
     g = _get_guest(db, guest_id, user)
+    if g.pass_kind == "permanent" and user.role != Role.super_admin:
+        raise HTTPException(403, "Only a Super Administrator can view permanent codes")
     ap = pass_available(g)
     if not ap:
         raise HTTPException(404, "No valid pass for this guest")
@@ -253,7 +306,10 @@ def email_pass(guest_id: str, request: Request, user: User = Depends(require_rol
     s = get_settings()
     g = _get_guest(db, guest_id, user)
     ap = pass_available(g)
-    if not ap or ap.redeemed_at:
+    permanent = g.pass_kind == "permanent"
+    if permanent and user.role != Role.super_admin:
+        raise HTTPException(403, "Only a Super Administrator can send permanent codes")
+    if not ap or (ap.redeemed_at and not permanent):
         raise HTTPException(404, "No unused pass for this guest")
     if not g.email:
         raise HTTPException(400, "Guest has no e-mail address")
@@ -264,13 +320,22 @@ def email_pass(guest_id: str, request: Request, user: User = Depends(require_rol
     msg["Subject"] = "Bessel Systems - Guest Wi-Fi access"
     msg["From"] = s.smtp_from
     msg["To"] = g.email
-    msg.set_content(
-        f"Hello {g.full_name},\n\n1. Connect your device to the Wi-Fi network: {p['ssid']}\n"
-        f"2. Open this link on the same device: {p['access_url']}\n"
-        f"   or enter the access code {p['access_code']} on the sign-in page.\n\n"
-        f"Access is valid for {g.duration_hours} hour(s) from first sign-in. The link must be used before "
-        f"{ap.redeem_before.astimezone(ZoneInfo(g.location.timezone)).strftime('%d %b %Y %H:%M')}.\n"
-        "The link works on one device only. Do not share it.\n\nBessel Systems Reception")
+    if permanent:
+        until = g.valid_until.strftime("%d %b %Y") if g.valid_until else "until it is withdrawn"
+        msg.set_content(
+            f"Hello {g.full_name},\n\nYour personal Wi-Fi code for {g.location.name}:\n\n"
+            f"    {p['access_code']}\n\n1. Connect your device to the Wi-Fi network: {p['ssid']}\n"
+            "2. Open any website; on the sign-in page enter the code above and tap Connect.\n\n"
+            f"The code is valid {('until ' + until) if g.valid_until else until} and works on all your devices.\n"
+            "It is issued to you personally. Do not share it.\n\nBessel Systems IT")
+    else:
+        msg.set_content(
+            f"Hello {g.full_name},\n\n1. Connect your device to the Wi-Fi network: {p['ssid']}\n"
+            f"2. Open this link on the same device: {p['access_url']}\n"
+            f"   or enter the access code {p['access_code']} on the sign-in page.\n\n"
+            f"Access is valid for {g.duration_hours} hour(s) from first sign-in. The link must be used before "
+            f"{ap.redeem_before.astimezone(ZoneInfo(g.location.timezone)).strftime('%d %b %Y %H:%M')}.\n"
+            "The link works on one device only. Do not share it.\n\nBessel Systems Reception")
     try:
         with smtplib.SMTP(s.smtp_host, s.smtp_port, timeout=15) as smtp:
             smtp.starttls()

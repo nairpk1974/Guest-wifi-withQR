@@ -7,6 +7,7 @@ import Setup from './pages/Setup'
 import Dashboard from './pages/Dashboard'
 import Register from './pages/Register'
 import Visitors from './pages/Visitors'
+import PermanentCodes from './pages/PermanentCodes'
 import Sessions from './pages/Sessions'
 import Reports from './pages/Reports'
 import Users from './pages/Users'
@@ -18,6 +19,7 @@ const NAV = [
   { to: '/', label: 'Dashboard', roles: ['super_admin', 'reception', 'auditor'], end: true },
   { to: '/register', label: 'Register visitor', roles: ['super_admin', 'reception'] },
   { to: '/visitors', label: 'Visitors & approvals', roles: ['super_admin', 'reception', 'auditor'] },
+  { to: '/permanent', label: 'Permanent codes', roles: ['super_admin'] },
   { to: '/sessions', label: 'Active sessions', roles: ['super_admin', 'reception', 'auditor'] },
   { to: '/reports', label: 'Reports & audit', roles: ['super_admin', 'reception', 'auditor'] },
   { to: '/users', label: 'Administrators', roles: ['super_admin'], section: 'Administration' },
@@ -62,6 +64,8 @@ export default function App() {
             {can('super_admin', 'reception') && <Route path="/register" element={<Register />} />}
             <Route path="/visitors" element={<Visitors />} />
             <Route path="/visitors/:id" element={<Visitors />} />
+            {can('super_admin') && <Route path="/permanent" element={<PermanentCodes />} />}
+            {can('super_admin') && <Route path="/permanent/:id" element={<PermanentCodes />} />}
             <Route path="/sessions" element={<Sessions />} />
             <Route path="/reports" element={<Reports />} />
             {can('super_admin') && <Route path="/users" element={<Users />} />}

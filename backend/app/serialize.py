@@ -43,7 +43,8 @@ def guest_out(g: Guest) -> dict:
             "rejection_reason": g.rejection_reason, "revoked_by": _name(g.revoked_by), "revoked_at": iso(g.revoked_at),
             "revoke_reason": g.revoke_reason, "access_started_at": iso(ap.access_started_at) if ap else None,
             "access_expires_at": iso(expires), "redeem_before": iso(ap.redeem_before) if ap else None,
-            "redeemed_at": iso(ap.redeemed_at) if ap else None, "anonymized": g.anonymized}
+            "redeemed_at": iso(ap.redeemed_at) if ap else None, "anonymized": g.anonymized,
+            "pass_kind": g.pass_kind, "valid_until": g.valid_until.isoformat() if g.valid_until else None}
 
 
 def session_out(rs: RadiusSession, g: Guest | None, loc_code: str | None) -> dict:
@@ -69,7 +70,8 @@ def pass_payload(g: Guest, ap: AccessPass) -> dict:
             "qr_svg": _qr(url), "wifi_qr_svg": wifi.svg_data_uri(scale=6, border=2),
             "duration_hours": g.duration_hours, "visit_date": g.visit_date.isoformat(),
             "redeem_before": iso(ap.redeem_before), "redeemed": ap.redeemed_at is not None,
-            "status": g.status.value}
+            "status": g.status.value, "pass_kind": g.pass_kind,
+            "valid_until": g.valid_until.isoformat() if g.valid_until else None}
 
 
 def pass_available(g: Guest) -> AccessPass | None:

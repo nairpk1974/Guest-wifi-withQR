@@ -86,9 +86,10 @@ def _validate_post_url(db: Session, post: str) -> tuple[Location, str] | None:
     return None
 
 
-def _set_claim(resp, claim: str):
+def _set_claim(resp, claim: str, permanent: bool = False):
+    # Permanent codes: remember the device for a year so the portal can sign it in again automatically.
     resp.set_cookie(CLAIM_COOKIE, claim, httponly=True, secure=get_settings().secure_cookies, samesite="lax",
-                    path="/", max_age=13 * 3600)
+                    path="/", max_age=365 * 24 * 3600 if permanent else 13 * 3600)
 
 
 def _autosubmit(request: Request, db: Session, ap: AccessPass, claim: str, username: str, password: str,
@@ -103,7 +104,7 @@ def _autosubmit(request: Request, db: Session, ap: AccessPass, claim: str, usern
     resp = _render(request, "autosubmit.html", {"post": post, "magic": magic, "username": username,
                                                 "password": password, "redir": redirect_after},
                    form_origin=origin)
-    _set_claim(resp, claim)
+    _set_claim(resp, claim, ap.guest.pass_kind == "permanent")
     return resp
 
 
@@ -120,6 +121,7 @@ def qr_landing(token: str, request: Request, db: Session = Depends(get_db)):
     terms, privacy = portal_texts(db)
     return _render(request, "landing.html", {"first_name": ap.guest.full_name.split()[0], "ssid": ap.guest.location.ssid,
                                              "location": ap.guest.location.name, "hours": ap.guest.duration_hours,
+                                             "permanent": ap.guest.pass_kind == "permanent",
                                              "token": token, "already": ap.redeemed_at is not None},
                    csrf=new_token(16))
 
@@ -147,7 +149,7 @@ def qr_claim(token: str, request: Request, csrf: str = Form(""), accept: str = F
     _log(db, "accept", "qr_claimed", request, ap)
     resp = _render(request, "connect.html", {"trigger": get_settings().captive_trigger_url,
                                              "ssid": ap.guest.location.ssid})
-    _set_claim(resp, claim)
+    _set_claim(resp, claim, ap.guest.pass_kind == "permanent")
     return resp
 
 
@@ -217,7 +219,8 @@ def portal_status(request: Request, db: Session = Depends(get_db)):
         ctx = {"ap": ap, "first_name": g.full_name.split()[0], "location": g.location.name, "ssid": g.location.ssid,
                "state": state, "message": message,
                "expires": ap.access_expires_at.astimezone(tz).strftime("%d %b %Y, %I:%M %p") if ap.access_expires_at else None,
-               "remaining": max(remaining, 0) if remaining is not None else None, "hours": g.duration_hours}
+               "remaining": max(remaining, 0) if remaining is not None else None, "hours": g.duration_hours,
+               "permanent": g.pass_kind == "permanent"}
     return _render(request, "status.html", ctx)
 
 

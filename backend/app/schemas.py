@@ -80,6 +80,23 @@ class GuestIn(BaseModel):
         return v
 
 
+class PermanentIn(BaseModel):
+    """Permanent Wi-Fi code assigned to a named person by an administrator."""
+    full_name: str = Field(min_length=2, max_length=120)
+    mobile: str = Field(min_length=7, max_length=20)
+    company: str | None = Field(default=None, max_length=160)
+    email: str | None = Field(default=None, max_length=160)
+    department: str | None = Field(default=None, max_length=80)
+    purpose: str | None = Field(default=None, max_length=255)
+    location_id: int
+    valid_until: date | None = None
+
+    _clean_name = field_validator("full_name")(GuestIn.clean_name.__func__)
+    _clean_opt = field_validator("company", "department", "purpose")(GuestIn.clean_optional.__func__)
+    _mobile = field_validator("mobile")(GuestIn.check_mobile.__func__)
+    _email = field_validator("email")(GuestIn.check_email.__func__)
+
+
 class ReasonIn(BaseModel):
     reason: str = Field(min_length=2, max_length=255)
 
