@@ -50,6 +50,13 @@ def expire_passes(db) -> int:
         db.add(AuditLog(action="guest.expired", entity_type="guest", entity_id=str(ap.guest_id),
                         location_id=ap.guest.location_id, details={"reason": "QR not used in time"}))
         n += 1
+    # Self-service Wi-Fi requests nobody answered (the guest is waiting on the sign-in page)
+    for g in db.scalars(select(Guest).where(Guest.status == GuestStatus.pending, Guest.source == "self",
+                                            Guest.created_at < now - timedelta(minutes=30))):
+        g.status = GuestStatus.expired
+        db.add(AuditLog(action="guest.expired", entity_type="guest", entity_id=str(g.id),
+                        location_id=g.location_id, details={"reason": "Wi-Fi request not answered in 30 min"}))
+        n += 1
     # Pending requests for a visit day that has passed
     for g in db.scalars(select(Guest).where(Guest.status == GuestStatus.pending,
                                             Guest.visit_date < (now - timedelta(days=1)).date())):

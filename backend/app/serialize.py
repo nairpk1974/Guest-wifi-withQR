@@ -44,7 +44,8 @@ def guest_out(g: Guest) -> dict:
             "revoke_reason": g.revoke_reason, "access_started_at": iso(ap.access_started_at) if ap else None,
             "access_expires_at": iso(expires), "redeem_before": iso(ap.redeem_before) if ap else None,
             "redeemed_at": iso(ap.redeemed_at) if ap else None, "anonymized": g.anonymized,
-            "pass_kind": g.pass_kind, "valid_until": g.valid_until.isoformat() if g.valid_until else None}
+            "pass_kind": g.pass_kind, "valid_until": g.valid_until.isoformat() if g.valid_until else None,
+            "source": g.source, "request_device": g.request_device, "request_ip": g.request_ip}
 
 
 def session_out(rs: RadiusSession, g: Guest | None, loc_code: str | None) -> dict:

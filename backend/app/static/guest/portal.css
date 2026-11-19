@@ -28,3 +28,6 @@ a{color:var(--teal)}
 .spinner{width:36px;height:36px;border:4px solid var(--line);border-top-color:var(--teal);border-radius:50%;margin:18px auto;animation:spin 1s linear infinite}
 @keyframes spin{to{transform:rotate(360deg)}}
 .foot{margin-top:18px;font-size:13px;color:var(--muted);text-align:center}
+.btn.secondary{background:#fff;color:var(--navy);border:2px solid var(--navy)}
+.or{display:flex;align-items:center;gap:10px;margin:18px 0 6px;color:#667085;font-size:13px}
+.or::before,.or::after{content:"";flex:1;border-top:1px solid #e4e7ec}

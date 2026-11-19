@@ -1,11 +1,11 @@
 import logging
 import smtplib
 import uuid
-from datetime import date, datetime, time
+from datetime import date, datetime, time, timedelta
 from email.message import EmailMessage
 from zoneinfo import ZoneInfo
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Request
+from fastapi import APIRouter, Body, Depends, HTTPException, Query, Request
 from sqlalchemy import Select, func, or_, select
 from sqlalchemy.orm import Session
 
@@ -15,7 +15,7 @@ from ..config import get_settings
 from ..db import get_db
 from ..models import (AuthEvent, Guest, GuestStatus, Location, PassDevice, PendingDisconnect, RadiusSession, Role,
                       User)
-from ..schemas import GuestIn, PermanentIn, ReasonIn
+from ..schemas import ApproveIn, GuestIn, PermanentIn, ReasonIn
 from ..security import assert_location, audit, current_user, location_scope, require_roles, utcnow
 from ..serialize import guest_out, iso, location_out, pass_available, pass_payload, session_out
 
@@ -193,12 +193,47 @@ def get_guest(guest_id: str, user: User = Depends(require_roles(*ANY)), db: Sess
     return out
 
 
+REQUEST_WINDOW_MINUTES = 30  # keep in sync with portal.REQUEST_WAIT_MINUTES
+
+
+def _request_out(g: Guest) -> dict:
+    return {"id": str(g.id), "full_name": g.full_name, "mobile": g.mobile, "location_id": g.location_id,
+            "location_code": g.location.code, "requested_at": iso(g.created_at), "client_ip": g.request_ip,
+            "device": g.request_device, "user_agent": g.request_user_agent,
+            "waiting_seconds": int((utcnow() - g.created_at).total_seconds())}
+
+
+def _open_requests(user: User, db: Session):
+    stmt = select(Guest).where(Guest.source == "self", Guest.status == GuestStatus.pending,
+                               Guest.created_at >= utcnow() - timedelta(minutes=REQUEST_WINDOW_MINUTES))
+    scope = location_scope(user)
+    if scope is not None:
+        stmt = stmt.where(Guest.location_id == scope)
+    return db.scalars(stmt.order_by(Guest.created_at)).all()
+
+
+@router.get("/requests")
+def list_requests(user: User = Depends(require_roles(*STAFF)), db: Session = Depends(get_db)):
+    """Guests waiting on the Wi-Fi sign-in page for approval (self-service requests)."""
+    return {"items": [_request_out(g) for g in _open_requests(user, db)], "durations": get_settings().durations,
+            "window_minutes": REQUEST_WINDOW_MINUTES}
+
+
+@router.get("/requests/count")
+def count_requests(user: User = Depends(require_roles(*STAFF)), db: Session = Depends(get_db)):
+    return {"pending": len(_open_requests(user, db))}
+
+
 @router.post("/guests/{guest_id}/approve")
-def approve(guest_id: str, request: Request, user: User = Depends(require_roles(*STAFF)),
-            db: Session = Depends(get_db)):
+def approve(guest_id: str, request: Request, body: ApproveIn | None = Body(default=None),
+            user: User = Depends(require_roles(*STAFF)), db: Session = Depends(get_db)):
     g = _get_guest(db, guest_id, user)
     if g.status != GuestStatus.pending:
         raise HTTPException(409, f"Guest is {g.status.value}, not pending")
+    if body and body.duration_hours:
+        if body.duration_hours not in get_settings().durations:
+            raise HTTPException(400, f"Duration must be one of {get_settings().durations} hours")
+        g.duration_hours = body.duration_hours
     if get_settings().require_separate_approver and g.created_by_id == user.id:
         raise HTTPException(403, "A different staff member must approve this request")
     g.status = GuestStatus.approved

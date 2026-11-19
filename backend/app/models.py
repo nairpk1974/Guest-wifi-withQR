@@ -130,6 +130,14 @@ class Guest(Base):
     # revoked or until valid_until (inclusive, location time zone)
     pass_kind: Mapped[str] = mapped_column(String(16), default="visitor", server_default="visitor", index=True)
     valid_until: Mapped[date | None] = mapped_column(Date, nullable=True)
+    # "reception" = registered in the console; "self" = guest asked for access on the Wi-Fi sign-in page
+    source: Mapped[str] = mapped_column(String(16), default="reception", server_default="reception")
+    # Self requests: hash of the requesting browser's cookie and its IP (to hand over the pass on approval)
+    request_claim_hash: Mapped[str | None] = mapped_column(String(64), nullable=True, unique=True)
+    request_ip: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    # Device description from the browser (e.g. "Android 14 · SM-S911B", "iPhone · iOS 17.5") + raw User-Agent
+    request_device: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    request_user_agent: Mapped[str | None] = mapped_column(String(255), nullable=True)
 
     created_by_id: Mapped[int | None] = mapped_column(ForeignKey("users.id"), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), index=True)

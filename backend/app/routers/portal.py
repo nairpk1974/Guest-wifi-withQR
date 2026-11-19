@@ -17,18 +17,26 @@ from fastapi.templating import Jinja2Templates
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
-from ..access import PassError, check_pass_usable, find_pass_by_claim, find_pass_by_code, find_pass_by_token, redeem
+from pydantic import ValidationError
+
+from ..access import (PassError, check_pass_usable, current_pass, find_pass_by_claim, find_pass_by_code,
+                      find_pass_by_token, redeem)
 from ..config import get_settings
 from ..db import get_db
-from ..models import AccessPass, AuthEvent, Location
-from ..security import client_ip, consteq, new_token, normalize_code, utcnow
+from ..models import AccessPass, AuditLog, AuthEvent, Guest, GuestStatus, Location
+from ..schemas import GuestIn
+from ..security import client_ip, consteq, new_token, normalize_code, sha256, utcnow
+from ..useragent import describe
 from .admin import portal_texts
 
 router = APIRouter(include_in_schema=False)
 templates = Jinja2Templates(directory=str(Path(__file__).resolve().parent.parent / "templates"))
 CLAIM_COOKIE = "bgw_claim"
 CSRF_COOKIE = "bgw_gcsrf"
+REQ_COOKIE = "bgw_req"
 MAX_FAILS_PER_IP = 10  # per 15 minutes
+REQUEST_WAIT_MINUTES = 30  # unanswered self-service requests are cancelled after this
+MAX_PENDING_REQUESTS_PER_SITE = 30
 
 
 def _csp(form_origin: str | None = None) -> str:
@@ -234,3 +242,107 @@ def terms(request: Request, db: Session = Depends(get_db)):
 def privacy(request: Request, db: Session = Depends(get_db)):
     _, p = portal_texts(db)
     return _render(request, "text.html", {"title": "Privacy notice", "text": p})
+
+
+# ---------------- Flow C: self-service request, approved remotely in the console ----------------
+def _request_form(request: Request, post: str, magic: str, loc: Location, error: str | None = None,
+                  full_name: str = "", mobile: str = "", status: int = 200) -> HTMLResponse:
+    return _render(request, "request.html", {"post": post, "magic": magic, "location": loc.name, "error": error,
+                                             "full_name": full_name, "mobile": mobile}, status=status,
+                   csrf=new_token(16))
+
+
+@router.get("/portal/request", response_class=HTMLResponse)
+def request_form(request: Request, post: str = "", magic: str = "", db: Session = Depends(get_db)):
+    checked = _validate_post_url(db, post) if post else None
+    if not checked:
+        return _error(request, "Please connect to the guest Wi-Fi and open any website to reach the sign-in page.")
+    return _request_form(request, post, magic, checked[0])
+
+
+@router.post("/portal/request", response_class=HTMLResponse)
+def request_submit(request: Request, full_name: str = Form(""), mobile: str = Form(""), post: str = Form(""),
+                   magic: str = Form(""), csrf: str = Form(""), accept: str = Form(""), db: Session = Depends(get_db)):
+    checked = _validate_post_url(db, post) if post else None
+    if not checked:
+        return _error(request, "Please connect to the guest Wi-Fi and open any website to reach the sign-in page.")
+    loc = checked[0]
+
+    def again(msg: str, status: int = 400):
+        return _request_form(request, post, magic, loc, msg, full_name, mobile, status)
+
+    if not _check_csrf(request, csrf):
+        return again("Your session expired. Please try again.")
+    if accept != "yes":
+        return again("You must accept the terms of use to continue.")
+    try:
+        data = GuestIn(full_name=full_name, mobile=mobile)
+    except ValidationError as e:
+        field = e.errors()[0]["loc"][0] if e.errors() else ""
+        return again("Please enter a valid mobile number." if field == "mobile" else "Please enter your full name.")
+    ip = client_ip(request)
+    now = utcnow()
+    since = now - timedelta(minutes=REQUEST_WAIT_MINUTES)
+    # One open request per device: a second submit from the same IP updates the existing request.
+    g = db.scalar(select(Guest).where(Guest.source == "self", Guest.status == GuestStatus.pending,
+                                      Guest.request_ip == ip, Guest.location_id == loc.id, Guest.created_at >= since))
+    if g is None:
+        open_count = db.scalar(select(func.count(Guest.id)).where(Guest.source == "self", Guest.location_id == loc.id,
+                                                                   Guest.status == GuestStatus.pending,
+                                                                   Guest.created_at >= since))
+        if open_count >= MAX_PENDING_REQUESTS_PER_SITE:
+            return again("Reception has too many open requests right now. Please ask at the desk.", 429)
+        g = Guest(full_name=data.full_name, mobile=data.mobile, company="-", host_person="-", department="-",
+                  purpose="Wi-Fi request from sign-in page", location_id=loc.id,
+                  visit_date=now.astimezone(ZoneInfo(loc.timezone)).date(), duration_hours=4,
+                  status=GuestStatus.pending, source="self", request_ip=ip, terms_accepted_at=now)
+        db.add(g)
+    else:
+        g.full_name, g.mobile = data.full_name, data.mobile
+    ua = request.headers.get("user-agent", "")
+    g.request_user_agent = ua[:255] or None
+    g.request_device = describe(ua)
+    claim = new_token(32)
+    g.request_claim_hash = sha256(claim)
+    db.flush()
+    db.add(AuditLog(action="guest.self_requested", entity_type="guest", entity_id=str(g.id), location_id=loc.id,
+                    ip=ip, details={"name": g.full_name}))
+    db.commit()
+    resp = RedirectResponse("/portal/request/wait", status_code=303)
+    resp.set_cookie(REQ_COOKIE, claim, httponly=True, secure=get_settings().secure_cookies, samesite="lax",
+                    path="/", max_age=2 * 3600)
+    return resp
+
+
+@router.get("/portal/request/wait", response_class=HTMLResponse)
+def request_wait(request: Request, db: Session = Depends(get_db)):
+    s = get_settings()
+    cookie = request.cookies.get(REQ_COOKIE)
+    g = db.scalar(select(Guest).where(Guest.request_claim_hash == sha256(cookie))) if cookie else None
+    ctx = {"state": "none", "trigger": s.captive_trigger_url, "wait_minutes": REQUEST_WAIT_MINUTES, "refresh": False}
+    if g is None:
+        return _render(request, "waiting.html", ctx)
+    ctx.update(first_name=g.full_name.split()[0], location=g.location.name,
+               requested=g.created_at.astimezone(ZoneInfo(g.location.timezone)).strftime("%I:%M %p"))
+    if g.status == GuestStatus.pending:
+        ctx.update(state="pending", refresh=True)
+        return _render(request, "waiting.html", ctx)
+    if g.status == GuestStatus.rejected:
+        ctx.update(state="rejected", reason=g.rejection_reason)
+        return _render(request, "waiting.html", ctx)
+    ap = current_pass(g)
+    if g.status in (GuestStatus.approved, GuestStatus.active) and ap:
+        try:
+            claim, _, _ = redeem(db, ap, request.cookies.get(CLAIM_COOKIE), client_ip(request))
+        except PassError as e:
+            db.rollback()
+            return _error(request, e.message, 403)
+        db.commit()
+        _log(db, "accept", "request_approved", request, ap)
+        # Send the browser through the firewall again: it lands on /portal with a fresh "magic"
+        # and the claim cookie signs it in automatically.
+        resp = _render(request, "connect.html", {"trigger": s.captive_trigger_url, "ssid": g.location.ssid})
+        _set_claim(resp, claim)
+        return resp
+    ctx.update(state="expired")
+    return _render(request, "waiting.html", ctx)

@@ -1,0 +1,19 @@
+{% extends "base.html" %}
+{% block content %}
+<h1>Request Wi-Fi access</h1>
+<p class="lead">Enter your name and mobile number. Reception at <b>{{ location }}</b> will approve your request, and this device will connect automatically.</p>
+{% if error %}<p class="err" role="alert">{{ error }}</p>{% endif %}
+<form method="post" action="/portal/request" autocomplete="on">
+  <input type="hidden" name="csrf" value="{{ csrf }}">
+  <input type="hidden" name="post" value="{{ post }}">
+  <input type="hidden" name="magic" value="{{ magic }}">
+  <label for="full_name">Your name</label>
+  <input id="full_name" name="full_name" value="{{ full_name or '' }}" maxlength="120" autocomplete="name" required>
+  <label for="mobile">Mobile number</label>
+  <input id="mobile" name="mobile" type="tel" value="{{ mobile or '' }}" maxlength="20" autocomplete="tel" placeholder="+91 98xxxxxxxx" required>
+  <label class="check"><input type="checkbox" name="accept" value="yes" required>
+    <span>I accept the <a href="/portal/terms" target="_blank">terms of use</a> and have read the <a href="/portal/privacy" target="_blank">privacy notice</a>.</span></label>
+  <button type="submit" class="btn">Request access</button>
+</form>
+<p class="small"><a href="/portal?post={{ post|urlencode }}&amp;magic={{ magic|urlencode }}">I have an access code</a></p>
+{% endblock %}

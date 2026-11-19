@@ -97,6 +97,10 @@ class PermanentIn(BaseModel):
     _email = field_validator("email")(GuestIn.check_email.__func__)
 
 
+class ApproveIn(BaseModel):
+    duration_hours: int | None = None
+
+
 class ReasonIn(BaseModel):
     reason: str = Field(min_length=2, max_length=255)
 

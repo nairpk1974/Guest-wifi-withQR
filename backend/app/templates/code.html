@@ -14,5 +14,7 @@
     <span>I accept the <a href="/portal/terms" target="_blank">terms of use</a> and have read the <a href="/portal/privacy" target="_blank">privacy notice</a>.</span></label>
   <button type="submit" class="btn">Connect</button>
 </form>
-<p class="small">No pass? Please ask reception. Guest access is for registered visitors only.</p>
+<div class="or"><span>or</span></div>
+<a class="btn secondary" href="/portal/request?post={{ post|urlencode }}&amp;magic={{ magic|urlencode }}">No code? Request access</a>
+<p class="small">Your request goes to reception. You are connected as soon as they approve it.</p>
 {% endblock %}

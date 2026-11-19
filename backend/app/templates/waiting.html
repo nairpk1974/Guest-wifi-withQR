@@ -1,0 +1,23 @@
+{% extends "base.html" %}
+{% block head %}{% if refresh %}<meta http-equiv="refresh" content="5">{% endif %}{% endblock %}
+{% block content %}
+{% if state == "pending" %}
+<div class="badge warn">Waiting for approval</div>
+<h1>Thanks, {{ first_name }}</h1>
+<p class="lead">Your request has been sent to reception at <b>{{ location }}</b>.</p>
+<div class="spinner" aria-hidden="true"></div>
+<p>Keep this page open. You will be connected automatically as soon as it is approved.</p>
+<p class="small">Requested at {{ requested }}. Requests that are not answered within {{ wait_minutes }} minutes are cancelled.</p>
+{% elif state == "rejected" %}
+<div class="badge bad">Not approved</div>
+<h1>Sorry, {{ first_name }}</h1>
+<p>Your request was not approved{% if reason %}: {{ reason }}{% endif %}. Please speak to reception.</p>
+{% elif state == "expired" %}
+<div class="badge bad">Request expired</div>
+<h1>No answer yet</h1>
+<p>Your request was not answered in time. Open any website (for example <a href="{{ trigger }}">{{ trigger }}</a>) to see the sign-in page again and send a new request, or speak to reception.</p>
+{% else %}
+<h1>No request found</h1>
+<p>This browser has no open Wi-Fi request. Open any website (for example <a href="{{ trigger }}">{{ trigger }}</a>) to see the sign-in page.</p>
+{% endif %}
+{% endblock %}

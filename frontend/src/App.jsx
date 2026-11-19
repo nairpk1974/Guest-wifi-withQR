@@ -1,6 +1,6 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Navigate, NavLink, Route, Routes } from 'react-router-dom'
-import { ROLE_LABEL } from './api'
+import { api, ROLE_LABEL } from './api'
 import { useAuth } from './auth'
 import Login from './pages/Login'
 import Setup from './pages/Setup'
@@ -8,6 +8,7 @@ import Dashboard from './pages/Dashboard'
 import Register from './pages/Register'
 import Visitors from './pages/Visitors'
 import PermanentCodes from './pages/PermanentCodes'
+import Requests from './pages/Requests'
 import Sessions from './pages/Sessions'
 import Reports from './pages/Reports'
 import Users from './pages/Users'
@@ -17,6 +18,7 @@ import { Logo } from './ui'
 
 const NAV = [
   { to: '/', label: 'Dashboard', roles: ['super_admin', 'reception', 'auditor'], end: true },
+  { to: '/requests', label: 'Wi-Fi requests', roles: ['super_admin', 'reception'], badge: true },
   { to: '/register', label: 'Register visitor', roles: ['super_admin', 'reception'] },
   { to: '/visitors', label: 'Visitors & approvals', roles: ['super_admin', 'reception', 'auditor'] },
   { to: '/permanent', label: 'Permanent codes', roles: ['super_admin'] },
@@ -30,6 +32,15 @@ const NAV = [
 export default function App() {
   const { loading, user, stage, logout, can } = useAuth()
   const [menuOpen, setMenuOpen] = useState(false)
+  const [waiting, setWaiting] = useState(0)
+  const staff = !!user && stage === 'full' && can('super_admin', 'reception')
+  useEffect(() => {
+    if (!staff) return
+    const poll = () => api.get('/api/requests/count').then(r => setWaiting(r.pending)).catch(() => {})
+    poll()
+    const t = setInterval(poll, 10000)
+    return () => clearInterval(t)
+  }, [staff])
   if (loading) return <div className="center muted">Loading…</div>
   if (!user) return <Login />
   if (stage !== 'full') return <Setup />
@@ -43,7 +54,7 @@ export default function App() {
           {items.map(n => (
             <div key={n.to}>
               {n.section && <div className="nav-section">{n.section}</div>}
-              <NavLink to={n.to} end={n.end}>{n.label}</NavLink>
+              <NavLink to={n.to} end={n.end}>{n.label}{n.badge && waiting > 0 && <span className="nav-badge">{waiting}</span>}</NavLink>
             </div>
           ))}
         </nav>
@@ -61,6 +72,7 @@ export default function App() {
         <div className="content">
           <Routes>
             <Route path="/" element={<Dashboard />} />
+            {can('super_admin', 'reception') && <Route path="/requests" element={<Requests />} />}
             {can('super_admin', 'reception') && <Route path="/register" element={<Register />} />}
             <Route path="/visitors" element={<Visitors />} />
             <Route path="/visitors/:id" element={<Visitors />} />

@@ -141,3 +141,9 @@ textarea { resize: vertical; }
   .printable { position: absolute; left: 0; top: 0; border: 2px solid #000; }
   .no-print { display: none !important; }
 }
+.nav-badge { display: inline-block; margin-left: 8px; min-width: 20px; padding: 1px 7px; border-radius: 99px; background: #f04438; color: #fff; font-size: 12px; font-weight: 700; text-align: center; }
+.request { margin-bottom: 12px; }
+.request h3 { margin: 0 0 2px; }
+.request-main { display: flex; justify-content: space-between; gap: 16px; flex-wrap: wrap; align-items: center; }
+.request-actions { display: flex; flex-direction: column; gap: 8px; min-width: 260px; }
+@media (max-width: 640px) { .request-actions { min-width: 0; width: 100%; } }
