@@ -17,7 +17,8 @@ def location_out(loc: Location, full: bool = False) -> dict:
                  portal_post_hosts=loc.portal_post_hosts or [], monitor_host=loc.monitor_host,
                  last_radius_seen_at=iso(loc.last_radius_seen_at), last_ping_ok_at=iso(loc.last_ping_ok_at),
                  last_ping_checked_at=iso(loc.last_ping_checked_at),
-                 coa_secret_configured=bool(get_settings().coa_secret_for(loc.code)))
+                 coa_secret_configured=bool(get_settings().coa_secret_for(loc.code)),
+                 api_url=loc.api_url, api_token_configured=bool(get_settings().api_token_for(loc.code)))
     return d
 
 
@@ -45,7 +46,8 @@ def guest_out(g: Guest) -> dict:
             "access_expires_at": iso(expires), "redeem_before": iso(ap.redeem_before) if ap else None,
             "redeemed_at": iso(ap.redeemed_at) if ap else None, "anonymized": g.anonymized,
             "pass_kind": g.pass_kind, "valid_until": g.valid_until.isoformat() if g.valid_until else None,
-            "source": g.source, "request_device": g.request_device, "request_ip": g.request_ip}
+            "source": g.source, "request_device": g.request_device, "request_ip": g.request_ip,
+            "request_mac": g.request_mac, "request_hostname": g.request_hostname}
 
 
 def session_out(rs: RadiusSession, g: Guest | None, loc_code: str | None) -> dict:

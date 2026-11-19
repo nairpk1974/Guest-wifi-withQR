@@ -11,6 +11,7 @@ from sqlalchemy.orm import Session
 
 from ..access import issue_pass, mark_disconnected, queue_disconnects, revoke
 from ..coa import send_disconnect
+from .. import fortigate
 from ..config import get_settings
 from ..db import get_db
 from ..models import (AuthEvent, Guest, GuestStatus, Location, PassDevice, PendingDisconnect, RadiusSession, Role,
@@ -199,7 +200,8 @@ REQUEST_WINDOW_MINUTES = 30  # keep in sync with portal.REQUEST_WAIT_MINUTES
 def _request_out(g: Guest) -> dict:
     return {"id": str(g.id), "full_name": g.full_name, "mobile": g.mobile, "location_id": g.location_id,
             "location_code": g.location.code, "requested_at": iso(g.created_at), "client_ip": g.request_ip,
-            "device": g.request_device, "user_agent": g.request_user_agent,
+            "device": g.request_device, "user_agent": g.request_user_agent, "mac": g.request_mac,
+            "hostname": g.request_hostname, "lookup_enabled": fortigate.configured(g.location),
             "waiting_seconds": int((utcnow() - g.created_at).total_seconds())}
 
 
@@ -212,11 +214,38 @@ def _open_requests(user: User, db: Session):
     return db.scalars(stmt.order_by(Guest.created_at)).all()
 
 
+def _fill_device_info(db: Session, items: list[Guest]) -> list[str]:
+    """Look up MAC / hostname of waiting devices on their FortiGate (read-only API, optional)."""
+    errors = []
+    for g in items:
+        if g.request_mac or not fortigate.configured(g.location):
+            continue
+        try:
+            d = fortigate.lookup(g.location, g.request_ip)
+        except RuntimeError as e:
+            msg = f"{g.location.code}: {e}"
+            if msg not in errors:
+                errors.append(msg)
+                log.warning("FortiGate device lookup failed: %s", msg)
+            continue
+        if d:
+            g.request_mac = d.get("mac")
+            g.request_hostname = (d.get("hostname") or "")[:120] or None
+            # Add what the firewall knows (e.g. "Apple iPhone 15") unless the browser already said it
+            extra = [w for w in (d.get("vendor") or "").split() if w.lower() not in (g.request_device or "").lower()]
+            if extra:
+                g.request_device = f"{g.request_device or 'Device'} · {' '.join(extra)}"[:120]
+    db.commit()
+    return errors
+
+
 @router.get("/requests")
 def list_requests(user: User = Depends(require_roles(*STAFF)), db: Session = Depends(get_db)):
     """Guests waiting on the Wi-Fi sign-in page for approval (self-service requests)."""
-    return {"items": [_request_out(g) for g in _open_requests(user, db)], "durations": get_settings().durations,
-            "window_minutes": REQUEST_WINDOW_MINUTES}
+    items = _open_requests(user, db)
+    lookup_errors = _fill_device_info(db, items)
+    return {"items": [_request_out(g) for g in items], "durations": get_settings().durations,
+            "window_minutes": REQUEST_WINDOW_MINUTES, "lookup_errors": lookup_errors}
 
 
 @router.get("/requests/count")

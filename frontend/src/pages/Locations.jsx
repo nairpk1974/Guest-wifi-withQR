@@ -6,6 +6,11 @@ function LocationCard({ loc, onSaved }) {
   const [f, setF] = useState({ ...loc, portal_post_hosts: (loc.portal_post_hosts || []).join(', ') })
   const [err, setErr] = useState('')
   const [ok, setOk] = useState('')
+  const [apiMsg, setApiMsg] = useState(null)
+  const testApi = async () => {
+    setApiMsg({ ok: true, message: 'Testing…' })
+    try { setApiMsg(await api.post(`/api/admin/locations/${loc.id}/api-test`)) } catch (ex) { setApiMsg({ ok: false, message: ex.message }) }
+  }
   const set = (k) => (e) => setF({ ...f, [k]: e.target.type === 'checkbox' ? e.target.checked : e.target.value })
 
   const save = async (e) => {
@@ -13,7 +18,7 @@ function LocationCard({ loc, onSaved }) {
     try {
       await api.patch(`/api/admin/locations/${loc.id}`, {
         name: f.name, ssid: f.ssid, enabled: f.enabled, coa_host: f.coa_host || null, coa_port: Number(f.coa_port) || 3799,
-        monitor_host: f.monitor_host || null,
+        monitor_host: f.monitor_host || null, api_url: f.api_url || null,
         portal_post_hosts: f.portal_post_hosts.split(',').map(s => s.trim()).filter(Boolean),
       })
       setOk('Saved.'); onSaved()
@@ -32,10 +37,15 @@ function LocationCard({ loc, onSaved }) {
         <Field label="RADIUS CoA/Disconnect host" hint="FortiGate IP that listens on UDP 3799"><input value={f.coa_host || ''} onChange={set('coa_host')} /></Field>
         <Field label="CoA port"><input type="number" value={f.coa_port} onChange={set('coa_port')} /></Field>
         <Field label="Monitor (ping) host"><input value={f.monitor_host || ''} onChange={set('monitor_host')} /></Field>
+        <Field label="FortiGate API URL (optional)" hint="Read-only REST API used to show the MAC and device name on Wi-Fi requests, e.g. https://192.168.0.1:4434 (docs 17)">
+          <input value={f.api_url || ''} onChange={set('api_url')} placeholder="https://firewall-ip:port" /></Field>
         <label className="check"><input type="checkbox" checked={f.enabled} onChange={set('enabled')} /> Location enabled</label>
       </div>
       <ul className="status-list small">
         <li>CoA secret in server environment: {loc.coa_secret_configured ? <span className="badge ok">configured</span> : <span className="badge bad">missing</span>}</li>
+        <li>FortiGate API token in server environment: {loc.api_token_configured ? <span className="badge ok">configured</span> : <span className="badge">not set</span>}
+          {' '}<button type="button" className="btn ghost sm" onClick={testApi}>Test API</button>
+          {apiMsg && <span className={`badge ${apiMsg.ok ? 'ok' : 'bad'}`} style={{ textTransform: 'none', marginLeft: 6 }}>{apiMsg.message}</span>}</li>
         <li>Last RADIUS packet: {fmt.dt(loc.last_radius_seen_at)}</li>
         <li>Last successful ping: {fmt.dt(loc.last_ping_ok_at)}</li>
       </ul>
@@ -52,7 +62,7 @@ export default function Locations() {
   return (
     <div>
       <div className="page-head"><h1>Locations & firewall integration</h1></div>
-      <p className="muted">RADIUS shared secrets and CoA secrets are set in the server's <code>.env</code> file, never here. The application holds no FortiGate administrator credentials.</p>
+      <p className="muted">RADIUS shared secrets and CoA secrets are set in the server's <code>.env</code> file, never here. The only FortiGate credential the application can hold is an optional read-only REST API token (also in <code>.env</code>).</p>
       <Alert>{err}</Alert>
       <div className="stack">{locs.map(l => <LocationCard key={l.id} loc={l} onSaved={load} />)}</div>
     </div>

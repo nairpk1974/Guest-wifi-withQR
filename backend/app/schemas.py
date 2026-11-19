@@ -128,7 +128,18 @@ class LocationPatch(BaseModel):
     coa_port: int | None = Field(default=None, ge=1, le=65535)
     portal_post_hosts: list[str] | None = None
     monitor_host: str | None = Field(default=None, max_length=64)
+    api_url: str | None = Field(default=None, max_length=120)
     enabled: bool | None = None
+
+    @field_validator("api_url")
+    @classmethod
+    def check_api_url(cls, v: str | None) -> str | None:
+        v = (v or "").strip().rstrip("/")
+        if not v:
+            return None
+        if not re.match(r"^https://[A-Za-z0-9.\-]+(:[0-9]{1,5})?$", v):
+            raise ValueError("Use https://<FortiGate IP>[:port], e.g. https://192.168.0.1:4434")
+        return v
 
     @field_validator("portal_post_hosts")
     @classmethod

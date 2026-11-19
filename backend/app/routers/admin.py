@@ -159,6 +159,24 @@ def update_location(location_id: int, body: LocationPatch, request: Request, use
     return location_out(loc, full=True)
 
 
+@router.post("/locations/{location_id}/api-test")
+def test_location_api(location_id: int, user: User = Depends(SUPER), db: Session = Depends(get_db)):
+    """Check the read-only FortiGate API: returns how many devices the firewall reports."""
+    from .. import fortigate
+    loc = db.get(Location, location_id)
+    if not loc:
+        raise HTTPException(404, "Location not found")
+    if not fortigate.configured(loc):
+        return {"ok": False, "message": "Set the API URL here and FGT_API_TOKEN_" + loc.code + " in .env first."}
+    fortigate._CACHE.pop(loc.id, None)
+    try:
+        devs = fortigate.devices(loc)
+    except RuntimeError as e:
+        return {"ok": False, "message": str(e)}
+    with_mac = sum(1 for d in devs if d.get("mac"))
+    return {"ok": True, "message": f"Connected. The firewall reports {len(devs)} devices ({with_mac} with MAC)."}
+
+
 @router.get("/settings")
 def get_settings_texts(user: User = Depends(SUPER), db: Session = Depends(get_db)):
     terms, privacy = portal_texts(db)

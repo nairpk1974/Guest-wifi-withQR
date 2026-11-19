@@ -28,7 +28,8 @@ function RequestRow({ r, durations, onDone }) {
         <div>
           <h3>{r.full_name}</h3>
           <div className="muted">{r.mobile} · {r.location_code}</div>
-          <div className="small"><b>{r.device || 'Unknown device'}</b> <span className="mono muted">{r.client_ip}</span></div>
+          <div className="small"><b>{r.device || 'Unknown device'}</b>{r.hostname && <> · “{r.hostname}”</>}</div>
+          <div className="small mono">{r.client_ip}{r.mac ? ` · ${r.mac}` : ''}{!r.mac && <span className="muted"> · MAC {r.lookup_enabled ? 'not seen yet' : 'shown after login'}</span>}</div>
           <div className="small muted" title={r.user_agent || ''}>Waiting {waited(r.waiting_seconds)}</div>
         </div>
         <div className="request-actions">
@@ -71,6 +72,7 @@ export default function Requests() {
       <p className="muted">Guests who tapped <b>Request access</b> on the Wi-Fi sign-in page. When you approve, their device connects automatically within a few seconds.
         Requests not answered within {data.window_minutes} minutes are cancelled. To cut someone off later, use <Link to="/sessions">Active sessions</Link> (disconnect) or revoke the visitor.</p>
       <Alert>{err}</Alert>
+      {data.lookup_errors?.length > 0 && <Alert kind="info">Device lookup on the firewall failed ({data.lookup_errors.join('; ')}). Names and approvals still work; MAC shows after login.</Alert>}
       {data.items.length === 0 ? (
         <div className="card muted center">No one is waiting.</div>
       ) : data.items.map(r => <RequestRow key={r.id} r={r} durations={data.durations} onDone={load} />)}

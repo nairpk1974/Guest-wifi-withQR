@@ -61,6 +61,13 @@ class Settings(BaseSettings):
     def durations(self) -> list[int]:
         return sorted({int(x) for x in self.allowed_durations_hours.split(",") if x.strip()})
 
+    # Optional read-only FortiGate REST API tokens (device MAC / hostname lookup for Wi-Fi requests)
+    fgt_api_token_blr: str = Field("", alias="FGT_API_TOKEN_BLR")
+    fgt_api_token_hyd: str = Field("", alias="FGT_API_TOKEN_HYD")
+
+    def api_token_for(self, location_code: str) -> str:
+        return {"BLR": self.fgt_api_token_blr, "HYD": self.fgt_api_token_hyd}.get(location_code.upper(), "")
+
     def coa_secret_for(self, location_code: str) -> str:
         return {"BLR": self.coa_secret_blr, "HYD": self.coa_secret_hyd}.get(location_code.upper(), "")
 

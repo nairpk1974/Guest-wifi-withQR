@@ -58,6 +58,8 @@ class Location(Base):
     portal_post_hosts: Mapped[list] = mapped_column(JSON, default=list)
     # Host pinged by the worker for the "firewall connectivity" tile
     monitor_host: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    # FortiGate REST API base URL (e.g. https://192.168.0.1:4434) for the read-only device lookup
+    api_url: Mapped[str | None] = mapped_column(String(120), nullable=True)
     last_radius_seen_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     last_ping_ok_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     last_ping_checked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
@@ -138,6 +140,9 @@ class Guest(Base):
     # Device description from the browser (e.g. "Android 14 · SM-S911B", "iPhone · iOS 17.5") + raw User-Agent
     request_device: Mapped[str | None] = mapped_column(String(120), nullable=True)
     request_user_agent: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    # Filled from the FortiGate device inventory / ARP table while the request is open
+    request_mac: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    request_hostname: Mapped[str | None] = mapped_column(String(120), nullable=True)
 
     created_by_id: Mapped[int | None] = mapped_column(ForeignKey("users.id"), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), index=True)

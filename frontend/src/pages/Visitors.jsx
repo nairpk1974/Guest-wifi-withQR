@@ -77,7 +77,7 @@ export function GuestDetail({ id, onClose, onChanged }) {
           ) : (
           <dl className="kv">
             <dt>Location</dt><dd>{g.location_code}</dd>
-            {g.source === 'self' && <><dt>Requested from</dt><dd>Wi-Fi sign-in page · {g.request_device || 'unknown device'} <span className="mono small muted">{g.request_ip}</span></dd></>}
+            {g.source === 'self' && <><dt>Requested from</dt><dd>Wi-Fi sign-in page · {g.request_device || 'unknown device'}{g.request_hostname ? ` · “${g.request_hostname}”` : ''} <span className="mono small muted">{g.request_ip}{g.request_mac ? ` · ${g.request_mac}` : ''}</span></dd></>}
             <dt>Visiting</dt><dd>{g.host_person} ({g.department})</dd>
             <dt>Purpose</dt><dd>{g.purpose}</dd>
             <dt>Visit date</dt><dd>{fmt.date(g.visit_date)}</dd>
